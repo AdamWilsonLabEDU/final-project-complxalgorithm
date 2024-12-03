@@ -181,6 +181,8 @@ get_acs_data <- function(year, geom) {
 
 #### US Data
 
+Add some text here
+
 ```{r us_data, warning=F}
 # get certain decennial 2010 census data at state level
 # then sum population and add additional data points taken from governmental reports
@@ -248,6 +250,8 @@ us_data.2010_2019 <-
 ```
 
 #### Census Tract Data
+
+Add some text here
 
 ```{r tract_data, warning=F}
 # get census tract data for 2010-2019
@@ -355,6 +359,8 @@ st_tracts.2010_2019 <-
 ```
 
 #### County Data
+
+Add some text here
 
 ```{r county_data, warning=F}
 # pull southern tier county data and calculate area in square miles
