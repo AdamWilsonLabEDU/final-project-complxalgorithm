@@ -3,6 +3,8 @@ title: "Determining Population, Economic, and Land Cover Changes in NY Appalachi
 author: Stephen C. Sanders
 date: today
 date-format: long
+execute:
+  cache: true
 ---
 
 # Introduction
@@ -35,7 +37,7 @@ You can do numbers like this:
 
 ## Load all required packages
 
-```{r, message=F, warning=F}
+```{r libraries, message=F, warning=F}
 # load necessary libraries
 library(tidyverse)
 library(tidycensus)
@@ -638,10 +640,6 @@ Add some text here
 Classification criteria comes from: https://www.arc.gov/distressed-areas-classification-system/
 
 ```{r distressed, warning=F}
-####################################################
-# DISTRESSED AREA ANALYSIS
-####################################################
-
 # get list of columns that are involved in distressed area classification
 distressed_cols <- c(
   grep('median_income', names(st_tracts.2010_2019), value = TRUE), 
@@ -737,8 +735,8 @@ calculate_county_level_data <- function(lc_file, year) {
   tot_pop_distressed_col <- as.symbol(paste('tot_pop_distressed_', as.character(year), sep = ''))
   
   # set total population column to use in calculations
-  tot_pop_est_col = as.symbol(paste('tot_popE_', as.character(year), sep = ''))
-  tot_pop_col = as.symbol(paste('tot_pop_', as.character(year), sep = ''))
+  tot_pop_est_col = paste('tot_popE_', as.character(year), sep = '')
+  tot_pop_col = paste('tot_pop_', as.character(year), sep = '')
   tot_hhs_col = as.symbol(paste('tot_hhs_', as.character(year), sep = ''))
   tot_below_poverty_col = as.symbol(paste('tot_below_poverty_', as.character(year), sep = ''))
   pop_civ_lab_force_col = as.symbol(paste('pop_gt_16_in_civ_lab_force_', as.character(year), sep = ''))
