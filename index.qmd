@@ -52,7 +52,6 @@ library(RColorBrewer)
 library(gridExtra)
 library(here)
 library(knitr)
-knitr::opts_chunk$set(widgetframe_widgets_dir = 'widgets' ) 
 knitr::opts_chunk$set(echo=TRUE)  # cache the results for quick compiling
 
 # pull in census api token
