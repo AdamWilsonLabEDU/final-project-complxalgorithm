@@ -1,8 +1,15 @@
 ---
-title: "Determining Population, Economic, and Land Cover Changes in NY Appalachia (2010-2019)"
+title: "Analyzing Population and Land Cover Changes in NY Appalachia (2010-2019)"
+subtitle: 'GEO511'
 author: Stephen C. Sanders
 date: today
 date-format: long
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-title: 'Table of Contents'
+    code-fold: true
 execute:
   cache: true
 ---
@@ -49,9 +56,11 @@ library(mapview)
 library(terra)
 library(tidyterra)
 library(gt)
+library(heatmaply)
 library(stringr)
 library(RColorBrewer)
 library(gridExtra)
+library(reshape2)
 library(here)
 library(knitr)
 knitr::opts_chunk$set(echo=TRUE)  # cache the results for quick compiling
@@ -184,7 +193,7 @@ get_acs_data <- function(year, geom) {
 
 Add some text here
 
-```{r us_data, warning=F}
+```{r us_data, warning=F, cache=T}
 # get certain decennial 2010 census data at state level
 # then sum population and add additional data points taken from governmental reports
 us_data.2010 <- get_decennial(geography = 'state',
@@ -254,7 +263,7 @@ us_data.2010_2019 <-
 
 Add some text here
 
-```{r tract_data, warning=F}
+```{r tract_data, warning=F, cache=T}
 # get census tract data for 2010-2019
 # isolate data for 2010, 2015, and 2019 and put into separate dfs
 st_tracts <- map2(2010:2019, rep('tract', times = 10), get_acs_data) %>% 
@@ -363,7 +372,7 @@ st_tracts.2010_2019 <-
 
 Add some text here
 
-```{r county_data, warning=F}
+```{r county_data, warning=F, cache=T}
 # pull southern tier county data and calculate area in square miles
 st_counties <- map2(2010:2019, rep('county', times = 10), get_acs_data) %>%
   bind_rows() %>% 
@@ -463,7 +472,7 @@ Add some text here
 
 Add some text here
 
-```{r land_cover_setup, warning=F}
+```{r land_cover_setup, warning=F, cache=T}
 # set urls to land cover images
 url_2010 <- 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/lcmap/public/full_extent_downloads/version_13/primary-landcover_conus_year_data/LCMAP_CU_2010_V13_LCPRI/LCMAP_CU_2010_V13_LCPRI.tif'
 url_2019 <- 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/lcmap/public/full_extent_downloads/version_13/primary-landcover_conus_year_data/LCMAP_CU_2019_V13_LCPRI/LCMAP_CU_2019_V13_LCPRI.tif'
@@ -564,7 +573,7 @@ The images would not suggest any major land cover changes
 Add some text here
 Areas shown in black are areas where the land cover has changed between 2010 and 2019
 
-```{r land_cover_chg_map, warning=F}
+```{r land_cover_chg_map, warning=F, cache=T}
 # compare 2019 and 2010 land cover images to see where changes occurred
 chg <- (st_lc_2019_masked == st_lc_2010_masked)
 
@@ -639,9 +648,10 @@ Add some text here
 
 Classification criteria comes from: https://www.arc.gov/distressed-areas-classification-system/
 
-```{r distressed, warning=F}
+```{r distressed_setup, warning=F}
 # get list of columns that are involved in distressed area classification
 distressed_cols <- c(
+  grep('tot_popE', names(st_tracts.2010_2019), value = TRUE),
   grep('median_income', names(st_tracts.2010_2019), value = TRUE), 
   grep('pct_below_poverty', names(st_tracts.2010_2019), value = TRUE)
 )
@@ -662,7 +672,11 @@ st_tracts.distressed <-
 distressed.tab <- 
   st_tracts.distressed %>%
   select(GEOID, NAME, county, grep('Distressed', colnames(st_tracts.distressed), value = TRUE))
+```
 
+Add some text here
+
+```{r became_distressed_tracts, warning=F, cache=T}
 # map which tracts became distressed between 2010 and 2019
 mapview(
   distressed.tab, 
@@ -671,7 +685,11 @@ mapview(
   popup = "NAME",
   layer.name = c("Became Distressed (2010 -> 2019)")
 )
+```
 
+Add some text here
+
+```{r improved_tracts, warning=F, cache=T}
 # map which tracts improved between 2010 and 2019
 mapview(
   distressed.tab, 
@@ -680,7 +698,11 @@ mapview(
   popup = "NAME",
   layer.name = c("Improved (2010 -> 2019)")
 )
+```
 
+Add some text here
+
+```{r distressed_chgs_table, warning=F}
 # create table of number of worsened and improved tracts by county, then display
 distressed_chgs <- distressed.tab %>% 
   group_by(county) %>% 
@@ -735,8 +757,8 @@ calculate_county_level_data <- function(lc_file, year) {
   tot_pop_distressed_col <- as.symbol(paste('tot_pop_distressed_', as.character(year), sep = ''))
   
   # set total population column to use in calculations
-  tot_pop_est_col = paste('tot_popE_', as.character(year), sep = '')
-  tot_pop_col = paste('tot_pop_', as.character(year), sep = '')
+  tot_pop_est_col = as.symbol(paste('tot_popE_', as.character(year), sep = ''))
+  tot_pop_col = as.symbol(paste('tot_pop_', as.character(year), sep = ''))
   tot_hhs_col = as.symbol(paste('tot_hhs_', as.character(year), sep = ''))
   tot_below_poverty_col = as.symbol(paste('tot_below_poverty_', as.character(year), sep = ''))
   pop_civ_lab_force_col = as.symbol(paste('pop_gt_16_in_civ_lab_force_', as.character(year), sep = ''))
@@ -769,6 +791,8 @@ calculate_county_level_data <- function(lc_file, year) {
   # iterate over each study county and get population, distressed, and zonal stats data,
   # then store resulting data frame in df object
   df <- for (i in southern_tier_counties) {
+    print(i)
+    
     # get county geography
     county_sf <- study_counties %>% filter(NAME == i)
     
@@ -893,22 +917,23 @@ final_counties_df <-
     tot_pop_improved_2010_2019 = tot_pop_improved_2010_2019.y
   ) %>%
   mutate(
-    pct_pop_chg_2010_2019 = ((tot_pop_2019 - tot_pop_2010) / tot_pop_2010) * 100,
-    pct_hhs_chg_2010_2019 = ((tot_hhs_2019 - tot_hhs_2010) / tot_hhs_2010) * 100,
-    pct_median_age_chg_2010_2019 = ((median_age_2019 - median_age_2010) / median_age_2010) * 100,
-    pct_median_income_chg_2010_2019 = ((median_income_2019 - median_income_2010) / median_income_2010) * 100,
-    pct_below_poverty_chg_2010_2019 = ((pct_below_poverty_2019 - pct_below_poverty_2010) / pct_below_poverty_2010) * 100,
-    pct_unemployed_chg_2010_2019 = ((pct_unemployed_2019 - pct_unemployed_2010) / pct_unemployed_2010)  * 100,
-    pct_pop_distressed_chg_2010_2019 = ((pct_pop_distressed_2019 - pct_pop_distressed_2010) / pct_pop_distressed_2010) * 100,
-    pct_hhs_no_vehicles_chg_2010_2019 = ((pct_hhs_no_vehicles_2019 - pct_hhs_no_vehicles_2010) / pct_hhs_no_vehicles_2010) * 100,
-    pct_developed_chg_2010_2019 = ((pct_developed_area_sqmi_2019 - pct_developed_area_sqmi_2010) / pct_developed_area_sqmi_2010) * 100,
-    pct_natural_barren_chg_2010_2019 = ((pct_natural_barren_area_sqmi_2019 - pct_natural_barren_area_sqmi_2010) / pct_natural_barren_area_sqmi_2010) * 100,
-    pct_cropland_chg_2010_2019 = ((pct_cropland_area_sqmi_2019 - pct_cropland_area_sqmi_2010) / pct_cropland_area_sqmi_2010) * 100,
-    pct_tree_cover_chg_2010_2019 = ((pct_tree_cover_area_sqmi_2019 - pct_tree_cover_area_sqmi_2010) / pct_tree_cover_area_sqmi_2010) * 100,
-    pct_grassland_chg_2010_2019 = ((pct_grassland_area_sqmi_2019 - pct_grassland_area_sqmi_2010) / pct_grassland_area_sqmi_2010) * 100,
-    pct_wetland_chg_2010_2019 = ((pct_wetland_area_sqmi_2019 - pct_wetland_area_sqmi_2010) / pct_wetland_area_sqmi_2010) * 100,
-    pct_water_chg_2010_2019 = ((pct_water_area_sqmi_2019 - pct_water_area_sqmi_2010) / pct_water_area_sqmi_2010) * 100
-  )
+    pct_pop_chg = ((tot_pop_2019 - tot_pop_2010) / tot_pop_2010) * 100,
+    pct_hhs_chg = ((tot_hhs_2019 - tot_hhs_2010) / tot_hhs_2010) * 100,
+    pct_median_age_chg = ((median_age_2019 - median_age_2010) / median_age_2010) * 100,
+    pct_median_income_chg = ((median_income_2019 - median_income_2010) / median_income_2010) * 100,
+    pct_below_poverty_chg = ((pct_below_poverty_2019 - pct_below_poverty_2010) / pct_below_poverty_2010) * 100,
+    pct_unemployed_chg = ((pct_unemployed_2019 - pct_unemployed_2010) / pct_unemployed_2010)  * 100,
+    pct_pop_distressed_chg = ((pct_pop_distressed_2019 - pct_pop_distressed_2010) / pct_pop_distressed_2010) * 100,
+    pct_hhs_no_vehicles_chg = ((pct_hhs_no_vehicles_2019 - pct_hhs_no_vehicles_2010) / pct_hhs_no_vehicles_2010) * 100,
+    pct_developed_chg = ((pct_developed_area_sqmi_2019 - pct_developed_area_sqmi_2010) / pct_developed_area_sqmi_2010) * 100,
+    pct_natural_barren_chg = ((pct_natural_barren_area_sqmi_2019 - pct_natural_barren_area_sqmi_2010) / pct_natural_barren_area_sqmi_2010) * 100,
+    pct_cropland_chg = ((pct_cropland_area_sqmi_2019 - pct_cropland_area_sqmi_2010) / pct_cropland_area_sqmi_2010) * 100,
+    pct_tree_cover_chg = ((pct_tree_cover_area_sqmi_2019 - pct_tree_cover_area_sqmi_2010) / pct_tree_cover_area_sqmi_2010) * 100,
+    pct_grassland_chg = ((pct_grassland_area_sqmi_2019 - pct_grassland_area_sqmi_2010) / pct_grassland_area_sqmi_2010) * 100,
+    pct_wetland_chg = ((pct_wetland_area_sqmi_2019 - pct_wetland_area_sqmi_2010) / pct_wetland_area_sqmi_2010) * 100,
+    pct_water_chg = ((pct_water_area_sqmi_2019 - pct_water_area_sqmi_2010) / pct_water_area_sqmi_2010) * 100
+  ) %>%
+  mutate_if(is.numeric, ~ replace_na(., 0) %>% replace(., is.infinite(.), 1000000))
 
 final_counties_df[is.na(final_counties_df)] <- 0
 
@@ -922,21 +947,21 @@ final_counties_df %>%
     subtitle = md('By Southern Tier County (2010 - 2019)')
   ) %>%
   cols_label(
-    pct_pop_chg_2010_2019 = md('**% Pop Change**'),
-    pct_hhs_chg_2010_2019 = md('**% HHs Change**'),
-    pct_median_age_chg_2010_2019 = md('**% Median Age Change**'),
-    pct_median_income_chg_2010_2019 = md('**% Median Income Change**'),
-    pct_below_poverty_chg_2010_2019 = md('**% Pop Below Poverty Change**'),
-    pct_unemployed_chg_2010_2019 = md('**% Unemployment Rate Change**'),
-    pct_pop_distressed_chg_2010_2019 = md('**% Pop Distressed Change**'),
-    pct_hhs_no_vehicles_chg_2010_2019 = md('**% HHs No Vehicle Change**'),
-    pct_developed_chg_2010_2019 = md('**% Developed Change**'),
-    pct_natural_barren_chg_2010_2019 = md('**% Natural Barren Change**'),
-    pct_cropland_chg_2010_2019 = md('**% Cropland Change**'),
-    pct_tree_cover_chg_2010_2019 = md('**% Tree Cover Change**'),
-    pct_grassland_chg_2010_2019 = md('**% Grassland Change**'),
-    pct_wetland_chg_2010_2019 = md('**% Wetland Change**'),
-    pct_water_chg_2010_2019 = md('**% Water Change**')
+    pct_pop_chg = md('**% Pop Change**'),
+    pct_hhs_chg = md('**% HHs Change**'),
+    pct_median_age_chg = md('**% Median Age Change**'),
+    pct_median_income_chg = md('**% Median Income Change**'),
+    pct_below_poverty_chg = md('**% Pop Below Poverty Change**'),
+    pct_unemployed_chg = md('**% Unemployment Rate Change**'),
+    pct_pop_distressed_chg = md('**% Pop Distressed Change**'),
+    pct_hhs_no_vehicles_chg = md('**% HHs No Vehicle Change**'),
+    pct_developed_chg = md('**% Developed Change**'),
+    pct_natural_barren_chg = md('**% Natural Barren Change**'),
+    pct_cropland_chg = md('**% Cropland Change**'),
+    pct_tree_cover_chg = md('**% Tree Cover Change**'),
+    pct_grassland_chg = md('**% Grassland Change**'),
+    pct_wetland_chg = md('**% Wetland Change**'),
+    pct_water_chg = md('**% Water Change**')
   ) %>%
   fmt_percent(decimals = 1, scale_values = FALSE)
 ```
@@ -945,9 +970,49 @@ final_counties_df %>%
 
 Add code and some text here
 
-<!-- ```{r correlations, warning=F} -->
+```{r correlations_main, warning=F}
+# filter for only pct chg columns
+counties.pct_chg <- final_counties_df %>% 
+  select(county, grep('chg', colnames(.), value = TRUE)) %>%
+  st_drop_geometry()
 
-<!-- ``` -->
+# calculate correlation coefficients between all variables
+correlations <- cor(select(counties.pct_chg, -c(county)))
+
+# display heatmap of correlations
+heatmaply(
+  correlations, colors = colorRampPalette(c('blue', 'white', 'orange'))(100), 
+  dendrogram = 'none', limits = c(-1, 1), branches.lwd = 0.5
+)
+```
+
+Add some text here
+
+```{r correlations_distressed, warning=F}
+# create data frame of correlation coefficients between 
+# pct distressed pop chg and other variables
+cor.df <- melt(correlations) %>% 
+  filter(Var1 == 'pct_pop_distressed_chg', Var2 != 'pct_pop_distressed_chg') %>%
+  select(-Var1) %>%
+  rename(
+    Variable = Var2,
+    Coefficient = value
+  ) %>%
+  arrange(desc(Coefficient))
+
+# display table of correlation with pct distressed pop chg in descending order of correlation
+cor.df %>%
+  gt() %>%
+  tab_header(title = md('**Correlation with Percent Distressed Population Change**')) %>%
+  cols_align(align = 'center') %>%
+  cols_label(
+    Variable = md('**Variable**'),
+    Coefficient = md('**Coefficient**')
+  ) %>%
+  fmt_number(columns = Coefficient, decimals = 3)
+```
+
+Add some text here
 
 # Conclusions
 
